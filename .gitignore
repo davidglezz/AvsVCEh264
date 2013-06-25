@@ -15,8 +15,8 @@ local.properties
 .classpath
 .settings/
 .loadpath
-.layout
-.depend
+*.layout
+*.depend
 
 # External tool builders
 .externalToolBuilders/

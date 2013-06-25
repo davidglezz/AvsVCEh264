@@ -1,5 +1,8 @@
 /*******************************************************************************
+* This file is part of AvsVCEh264.
 * Contains declaration & functions for reading the configuration file
+*
+* Copyright (C) 2013 David González García <davidgg666@gmail.com>
 *******************************************************************************/
 
 #include "ini.h"
@@ -153,14 +156,14 @@ static int handler(void* user, const char* section, const char* name, const char
 		{
 			pConfig->rateControl.encRateControlPeakBitRate = iVal;
 		}
-		else if (IS_NAME("encRateControlFrameRateNumerator"))
+		/*else if (IS_NAME("encRateControlFrameRateNumerator"))
 		{
 			pConfig->rateControl.encRateControlFrameRateNumerator = iVal;
 		}
 		else if (IS_NAME("encRateControlFrameRateDenominator"))
 		{
 			pConfig->rateControl.encRateControlFrameRateDenominator = iVal;
-		}
+		}*/
 		else if (IS_NAME("encGOPSize"))
 		{
 			pConfig->rateControl.encGOPSize = iVal;

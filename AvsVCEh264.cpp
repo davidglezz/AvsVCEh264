@@ -51,6 +51,7 @@ typedef unsigned __int64    uint64;
 #include <OpenVideo\OVEncodeTypes.h>
 #include "avisynth_c.h"
 #include "configFile.h"
+#include "timer.h"
 
 
 AVS_Clip* avisynth_filter(AVS_Clip *clip, AVS_ScriptEnvironment *env, const char *filter)
@@ -454,8 +455,10 @@ void waitForEvent(cl_event inMapEvt)
 bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 			OPContextHandle oveContext, unsigned int deviceId, OvConfigCtrl *pConfig)
 {
+	cl_device_id clDeviceID = reinterpret_cast<cl_device_id>(deviceId);
 	AVS_ScriptEnvironment *env = avs_create_script_environment(AVISYNTH_INTERFACE_VERSION);
     AVS_Clip *clip = avisynth_source(inFile, env);
+
     const AVS_VideoInfo *info = avs_get_video_info(clip);
 
     if (!avs_has_video(info))
@@ -464,11 +467,19 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
         return false;
     }
 
+    pConfig->rateControl.encRateControlFrameRateNumerator = info->fps_numerator;
+	pConfig->rateControl.encRateControlFrameRateDenominator = info->fps_denominator;
+
+	unsigned int gpuFreq, size;
+    clGetDeviceInfo(clDeviceID, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(unsigned int), &gpuFreq, &size);
+
+	// Show Info
     fprintf(stderr, "Width       %d\n", info->width);
 	fprintf(stderr, "Height      %d\n", info->height);
 	fprintf(stderr, "Fps         %f\n", info->fps_numerator / (float)info->fps_denominator);
 	fprintf(stderr, "Frames      %d\n", info->num_frames);
-	fprintf(stderr, "Duration    %d\n", info->num_frames * info->fps_denominator /  info->fps_numerator);
+	fprintf(stderr, "Duration    %d s\n", info->num_frames * info->fps_denominator /  info->fps_numerator);
+	fprintf(stderr, "GPU Freq    %6.2f MHz\n", (float)gpuFreq);
 
     // ensure video is yv12
     if (avs_has_video(info) && !avs_is_yv12(info))
@@ -502,8 +513,6 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
     OPEventHandle eventRunVideoProgram;
 
     // Initilizes encoder session & buffers
-    cl_device_id clDeviceID = reinterpret_cast<cl_device_id>(deviceId);
-
     // Create an OVE Session (Platform context, id, mode, profile, format, ...)
     // encode task priority. FOR POSSIBLY LOW LATENCY OVE_ENCODE_TASK_PRIORITY_LEVEL2 */
     encodeHandle->session = OVEncodeCreateSession(oveContext, deviceId,
@@ -577,7 +586,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 
         // Read the input file frame by frame
         void* mapPtr = clEnqueueMapBuffer(encodeHandle->clCmdQueue, (cl_mem)inputSurface, CL_TRUE,
-                                          CL_MAP_READ | CL_MAP_WRITE, 0, hostPtrSize, 0, NULL, &inMapEvt, &status);
+										CL_MAP_READ | CL_MAP_WRITE, 0, hostPtrSize, 0, NULL, &inMapEvt, &status);
 
         status = clFlush(encodeHandle->clCmdQueue);
         waitForEvent(inMapEvt);
@@ -680,7 +689,6 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
                 fprintf(stderr, "OVEncodeQueryTaskDescription returned error %d\n", err);
                 return false;
             }
-
         }
         while (pTaskDescriptionList->status == OVE_TASK_STATUS_NONE);
 
@@ -704,10 +712,6 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 
 
     fprintf(stderr, "\r%d%% ", 100 * framenum / framecount);
-
-    unsigned int gpuFreq, size;
-    clGetDeviceInfo(clDeviceID, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(unsigned int), &gpuFreq, &size);
-	printf("\nGPU Frequency      : %6.2f  MHz\n", (float)gpuFreq);
 
 	// Free memory resources
     avs_release_clip(clip);
@@ -800,9 +804,9 @@ int GetWindowsVersion()
 
 int main(int argc, char* argv[])
 {
-    char filename[255] = {0};
+    char input[255] = {0};
     char output[255] = {0};
-    char configFilename[255] = {0};
+    char configFile[255] = {0};
 
 	// Currently the OpenEncode support is only for vista and w7
     if(GetWindowsVersion() < 6)
@@ -812,43 +816,41 @@ int main(int argc, char* argv[])
     }
 
     // Helps on command line configuration usage cases
-    if (argc <= 2)
+    if (argc < 2)
     {
         showHelp();
         return 1;
     }
 
     // processing the command line and configuration file
-    int index = 0, argCheck = 0;
-    while (index < argc)
+    int argCheck = 0;
+    for (int i = 0; i < argc; i++)
     {
-        if (strncmp(argv[index], "-h", 2) == 0)
+        if (strncmp(argv[i], "-h", 2) == 0)
         {
             showHelp();
             return 1;
         }
 
         // processing working directory and input file
-        if (strncmp (argv[index], "-i", 2) == 0)
+        if (strncmp (argv[i], "-i", 2) == 0)
         {
-            strcat(filename, argv[index+1]);
+            strcat(input, argv[i+1]);
             argCheck++;
         }
 
         // processing working directory and output file
-        if (strncmp (argv[index], "-o", 2) == 0 )
+        if (strncmp (argv[i], "-o", 2) == 0 )
         {
-            strcat(output, argv[index+1]);
+            strcat(output, argv[i+1]);
             argCheck++;
         }
 
-        if (strncmp(argv[index], "-c", 2) == 0 )
+        if (strncmp(argv[i], "-c", 2) == 0 )
         {
-            strcat(configFilename, argv[index+1]);
+            strcat(configFile, argv[i+1]);
             argCheck++;
         }
-
-        index++;
     }
 
     if(argCheck != 3)
@@ -862,9 +864,8 @@ int main(int argc, char* argv[])
     OvConfigCtrl *pConfigCtrl = (OvConfigCtrl*) &configCtrl;
     memset (pConfigCtrl, 0, sizeof (OvConfigCtrl));
 
-    if (!loadConfig(pConfigCtrl, configFilename))
+    if (!loadConfig(pConfigCtrl, configFile))
         return 1;
-
 
     // Query for the device information:
     // This function fills the device handle with number of devices available and devices ids.
@@ -882,12 +883,18 @@ int main(int argc, char* argv[])
     OPContextHandle oveContext;
     encodeCreate(&oveContext, deviceId, &deviceHandle);
 
+    Timer timer;
+    OVEncodeHandle encodeHandle;
+
     // Create, initialize & encode a file
     puts("Encoding...\n");
-    OVEncodeHandle encodeHandle;
-    status = encodeProcess(&encodeHandle, filename, output, oveContext, deviceId, pConfigCtrl);
+    timer.start();
+    status = encodeProcess(&encodeHandle, input, output, oveContext, deviceId, pConfigCtrl);
+    timer.stop();
     if (status == false)
         return 1;
+
+	fprintf(stderr, "Encoding complete in %f s\n", timer.getElapsedTime());
 
     // Free the resources used by the encoder session
     status = encodeClose(&encodeHandle);
@@ -903,8 +910,8 @@ int main(int argc, char* argv[])
     if (status == false)
         return 1;
 
-    // All done, Check the status of destroy and display the Frame Rate
-    printf("Encoding complete. Output written to %s \n", output);
+    // All done
+    fprintf(stderr, "Output written to %s \n", output);
     return 0;
 }
 

@@ -1,6 +1,6 @@
 /*******************************************************************************
 * This file is part of AvsVCEh264.
-* Contains contains simple high-resolution Timer class
+* Contains simple high-resolution Timer class
 *
 * Copyright (C) 2013 David González García <davidgg666@gmail.com>
 *******************************************************************************/
@@ -15,7 +15,9 @@ class Timer
   public:
     Timer()
     {
+    	LARGE_INTEGER frequency;
 		QueryPerformanceFrequency(&frequency);
+		mul = 1000000.0 / frequency.QuadPart;
     }
 
     ~Timer() {}
@@ -51,12 +53,11 @@ class Timer
 		if(endCount.QuadPart == 0)
 			QueryPerformanceCounter(&endCount);
 
-		return (endCount.QuadPart * (1000000.0 / frequency.QuadPart))
-			- (startCount.QuadPart * (1000000.0 / frequency.QuadPart));
+		return endCount.QuadPart * mul - startCount.QuadPart * mul;
 	}
 
   private:
-    LARGE_INTEGER frequency;
+    double mul;
     LARGE_INTEGER startCount;
     LARGE_INTEGER endCount;
 };
