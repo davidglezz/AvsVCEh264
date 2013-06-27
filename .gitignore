@@ -17,6 +17,7 @@ local.properties
 .loadpath
 *.layout
 *.depend
+_old
 
 # External tool builders
 .externalToolBuilders/

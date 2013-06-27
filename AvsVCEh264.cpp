@@ -52,6 +52,51 @@ typedef unsigned __int64    uint64;
 #include "avisynth_c.h"
 #include "configFile.h"
 #include "timer.h"
+#include "buffer.h"
+
+/** Global **/
+unsigned int currentFrame = 0;
+
+const AVS_VideoInfo *info;
+
+// Threads
+HANDLE hThreadDec, hThreadEnc, hThreadMonitor;
+
+// Timer
+Timer timer;
+
+// Buffer
+
+
+DWORD WINAPI threadMonitor(LPVOID id)
+{
+    fprintf(stderr, "\n");
+    while (!GetAsyncKeyState(VK_F8))
+    {
+    	unsigned int percent = currentFrame * 100 / info->num_frames;
+
+    	unsigned int elapsed_s = timer.getInSec();
+    	unsigned int remaining_s = elapsed_s * info->num_frames / currentFrame;
+
+    	unsigned int elapsed_h = elapsed_s / 3600;
+		elapsed_s %= 3600;
+		unsigned int elapsed_m = elapsed_s / 60;
+		elapsed_s %= 60;
+
+		unsigned int remaining_h = remaining_s / 3600;
+		remaining_s %= 3600;
+		unsigned int remaining_m = remaining_s / 60;
+		remaining_s %= 60;
+
+
+        fprintf(stderr, "\r%u%%\tElapsed: %u:%02u:%02u\tRem.: %u:%02u:%02u",
+				percent, elapsed_h, elapsed_m, elapsed_s,
+				remaining_h, remaining_m, remaining_s);
+        Sleep(250);
+    }
+    fprintf(stderr, "\n");
+    return 0;
+}
 
 
 AVS_Clip* avisynth_filter(AVS_Clip *clip, AVS_ScriptEnvironment *env, const char *filter)
@@ -110,9 +155,9 @@ AVS_Clip* avisynth_source(char *file, AVS_ScriptEnvironment *env)
 
 typedef struct OVDeviceHandle
 {
-    ovencode_device_info *deviceInfo; // Pointer to device info
-    unsigned int                numDevices; // Number of devices available
-    cl_platform_id        platform;   // Platform
+    ovencode_device_info *deviceInfo;
+    unsigned int numDevices;
+    cl_platform_id platform;
 } OVDeviceHandle;
 
 
@@ -459,7 +504,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 	AVS_ScriptEnvironment *env = avs_create_script_environment(AVISYNTH_INTERFACE_VERSION);
     AVS_Clip *clip = avisynth_source(inFile, env);
 
-    const AVS_VideoInfo *info = avs_get_video_info(clip);
+    info = avs_get_video_info(clip);
 
     if (!avs_has_video(info))
     {
@@ -497,7 +542,6 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 
 	// Vars
 	//unsigned int frameSize = info->width * info->height * 3 / 2;
-	unsigned int framecount = info->num_frames;
 
     // Make sure the surface is byte aligned
     unsigned int alignedSurfaceWidth = ((info->width + (256 - 1)) & ~(256 - 1));
@@ -505,6 +549,11 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 
 	// NV12 is 3/2
     int hostPtrSize = alignedSurfaceHeight * alignedSurfaceWidth * 3/2;
+
+    fprintf(stderr, "\nhostPtrSize: %d\n", hostPtrSize);
+    //fprintf(stderr, "frameSize: %d\n", frameSize);
+    fprintf(stderr, "alignedSurfaceWidth: %d\n", alignedSurfaceWidth);
+    fprintf(stderr, "alignedSurfaceHeight: %d\n", alignedSurfaceHeight);
 
     cl_int err;
     unsigned int numEventInWaitList = 0;
@@ -542,6 +591,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
         return false;
     }
 
+
     for(int i = 0; i < MAX_INPUT_SURFACE; i++)
     {
         encodeHandle->inputSurfaces[i] = clCreateBuffer((cl_context)oveContext, CL_MEM_READ_WRITE, hostPtrSize, NULL, &err);
@@ -565,7 +615,6 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
     unsigned int iTaskID;
     unsigned int numTaskDescriptionsRequested = 1;
     unsigned int numTaskDescriptionsReturned = 0;
-    unsigned int framenum = 0;
     OVE_OUTPUT_DESCRIPTION pTaskDescriptionList[1];
 
 	// Output file handle
@@ -576,13 +625,18 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
         return false;
     }
 
+    	// Esto no deberia estar aqui
+    hThreadMonitor = CreateThread(NULL, 0, threadMonitor, 0, 0, 0);
+    SetThreadPriority(hThreadMonitor, THREAD_PRIORITY_IDLE);
+
+
 	// Go!
-    for (framenum = 0; framenum < framecount; framenum++)
+    for (currentFrame = 0; currentFrame < (unsigned)info->num_frames; currentFrame++)
     {
         cl_event inMapEvt;
         cl_int status;
 
-        inputSurface = encodeHandle->inputSurfaces[framenum % MAX_INPUT_SURFACE];
+        inputSurface = encodeHandle->inputSurfaces[currentFrame % MAX_INPUT_SURFACE];
 
         // Read the input file frame by frame
         void* mapPtr = clEnqueueMapBuffer(encodeHandle->clCmdQueue, (cl_mem)inputSurface, CL_TRUE,
@@ -594,7 +648,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 
 		//Read into the input surface buffer
         BYTE *pBuf = (BYTE*)mapPtr;
-        AVS_VideoFrame *frame = avs_get_frame(clip, framenum);
+        AVS_VideoFrame *frame = avs_get_frame(clip, currentFrame);
 
         const BYTE *pYplane = avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
         const BYTE *pUplane = avs_get_read_ptr_p(frame, AVS_PLANAR_U);
@@ -629,7 +683,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
         // not sure release is needed, but it doesn't cause an error
         avs_release_frame(frame);
 
-        fprintf(stderr, "\r%d%% ", 100 * framenum / framecount);
+        fprintf(stderr, "\r%d%% ", 100 * currentFrame / info->num_frames);
 
         // ------- END READIN FRAME ---------
         cl_event unmapEvent;
@@ -647,7 +701,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
         pictureParameter.size = sizeof(OVE_ENCODE_PARAMETERS_H264);
         pictureParameter.flags.value = 0;
         pictureParameter.flags.flags.reserved = 0;
-        pictureParameter.insertSPS = (OVE_BOOL)(framenum == 0)?true:false;
+        pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0)?true:false;
         pictureParameter.pictureStructure = OVE_PICTURE_STRUCTURE_H264_FRAME;
         pictureParameter.forceRefreshMap = (OVE_BOOL)true;
         pictureParameter.forceIMBPeriod = 0;
@@ -710,8 +764,6 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
             clReleaseEvent((cl_event) eventRunVideoProgram);
     }
 
-
-    fprintf(stderr, "\r%d%% ", 100 * framenum / framecount);
 
 	// Free memory resources
     avs_release_clip(clip);
@@ -883,7 +935,6 @@ int main(int argc, char* argv[])
     OPContextHandle oveContext;
     encodeCreate(&oveContext, deviceId, &deviceHandle);
 
-    Timer timer;
     OVEncodeHandle encodeHandle;
 
     // Create, initialize & encode a file
@@ -895,6 +946,12 @@ int main(int argc, char* argv[])
         return 1;
 
 	fprintf(stderr, "Encoding complete in %f s\n", timer.getElapsedTime());
+
+
+	/**/
+	TerminateThread(hThreadMonitor, 0);
+    CloseHandle(hThreadMonitor);
+
 
     // Free the resources used by the encoder session
     status = encodeClose(&encodeHandle);

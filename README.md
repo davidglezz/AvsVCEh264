@@ -26,7 +26,8 @@ To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visu
 ## TODO
 - Stdout output support.
 - Do case insensitive config file.
-- Buffered.
+- Buffered / Multi thread.
 - Set default input switch values for Output
+- Pause / Cancel buttons
 
 

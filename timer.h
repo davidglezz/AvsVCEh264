@@ -50,10 +50,14 @@ class Timer
 
     double getInMicroSec()
 	{
-		if(endCount.QuadPart == 0)
-			QueryPerformanceCounter(&endCount);
+		LARGE_INTEGER end;
 
-		return endCount.QuadPart * mul - startCount.QuadPart * mul;
+		if(endCount.QuadPart == 0)
+			QueryPerformanceCounter(&end);
+		else
+			end = endCount;
+
+		return end.QuadPart * mul - startCount.QuadPart * mul;
 	}
 
   private:
