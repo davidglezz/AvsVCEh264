@@ -39,6 +39,7 @@
 		</Unit>
 		<Unit filename="README.md" />
 		<Unit filename="avisynth_c.h" />
+		<Unit filename="buffer.h" />
 		<Unit filename="configFile.h" />
 		<Unit filename="ini.c">
 			<Option compilerVar="CC" />

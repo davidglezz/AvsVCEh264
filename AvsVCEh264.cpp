@@ -57,7 +57,7 @@ typedef unsigned __int64    uint64;
 /** Global **/
 unsigned int currentFrame = 0;
 
-const AVS_VideoInfo *info;
+const AVS_VideoInfo *info = 0;
 
 // Threads
 HANDLE hThreadDec, hThreadEnc, hThreadMonitor;
@@ -71,13 +71,19 @@ Timer timer;
 DWORD WINAPI threadMonitor(LPVOID id)
 {
     fprintf(stderr, "\n");
+
     while (!GetAsyncKeyState(VK_F8))
     {
+    	double time = timer.getInSec();
+
     	unsigned int percent = currentFrame * 100 / info->num_frames;
 
-    	unsigned int elapsed_s = timer.getInSec();
-    	unsigned int remaining_s = elapsed_s * info->num_frames / currentFrame;
+		double fps = currentFrame / time;
 
+    	unsigned int remaining_s = time * (double)info->num_frames /
+						(double)(currentFrame+1) - time;
+
+		unsigned int elapsed_s = time;
     	unsigned int elapsed_h = elapsed_s / 3600;
 		elapsed_s %= 3600;
 		unsigned int elapsed_m = elapsed_s / 60;
@@ -88,10 +94,10 @@ DWORD WINAPI threadMonitor(LPVOID id)
 		unsigned int remaining_m = remaining_s / 60;
 		remaining_s %= 60;
 
+        fprintf(stderr, "\r%u%%\t%u/%u\tFps: %f\tElapsed: %u:%02u:%02u\tRem.: %u:%02u:%02u",
+				percent, currentFrame, info->num_frames, fps, elapsed_h,
+				elapsed_m, elapsed_s, remaining_h, remaining_m, remaining_s);
 
-        fprintf(stderr, "\r%u%%\tElapsed: %u:%02u:%02u\tRem.: %u:%02u:%02u",
-				percent, elapsed_h, elapsed_m, elapsed_s,
-				remaining_h, remaining_m, remaining_s);
         Sleep(250);
     }
     fprintf(stderr, "\n");
@@ -625,7 +631,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
         return false;
     }
 
-    	// Esto no deberia estar aqui
+	// Esto no deberia estar aqui
     hThreadMonitor = CreateThread(NULL, 0, threadMonitor, 0, 0, 0);
     SetThreadPriority(hThreadMonitor, THREAD_PRIORITY_IDLE);
 
@@ -633,6 +639,9 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 	// Go!
     for (currentFrame = 0; currentFrame < (unsigned)info->num_frames; currentFrame++)
     {
+    	if (GetAsyncKeyState(VK_F8))
+			break;
+
         cl_event inMapEvt;
         cl_int status;
 
@@ -945,7 +954,7 @@ int main(int argc, char* argv[])
     if (status == false)
         return 1;
 
-	fprintf(stderr, "Encoding complete in %f s\n", timer.getElapsedTime());
+	fprintf(stderr, "\nEncoding complete in %f s\n", timer.getElapsedTime());
 
 
 	/**/
