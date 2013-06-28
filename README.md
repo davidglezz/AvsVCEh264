@@ -15,7 +15,10 @@ If you have questions about settings values you can read and take as an example 
 ## Limitations
 ### Software
 The OpenVideo library is currently supported only on Windows 7 (maybe Vista).
+
 Catalyst driver release 12.8+
+
+Lastest version of AviSynth. Download from [http://avisynth.nl/](http://avisynth.nl/ "official website")
 
 ### Hardware
 TrinityAPU, Radeon HD 7000 Series (Tahiti XT, CapeVerde) or newer GPU.
@@ -29,5 +32,5 @@ To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visu
 - Buffered / Multi thread.
 - Set default input switch values for Output
 - Pause / Cancel buttons
-
+- Memory leaks!
 

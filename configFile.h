@@ -337,7 +337,7 @@ bool loadConfig (OvConfigCtrl *pConfig, char *configFilename)
 {
 	// DEFAULT CONFIG
     // fill-in the general configuration structures
-    pConfig->encodeMode = (OVE_ENCODE_MODE) 1;
+    pConfig->encodeMode								= (OVE_ENCODE_MODE) 1;
     pConfig->profileLevel.level						= 30;
     pConfig->profileLevel.profile					= 66;
     pConfig->pictFormat								= (OVE_PICTURE_FORMAT) 1;
