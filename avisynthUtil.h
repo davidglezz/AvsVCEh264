@@ -1,3 +1,9 @@
+/*******************************************************************************
+* This file is part of AvsVCEh264.
+* Contains functions for working with avisynth
+*
+* Copyright (C) 2013 David González García <davidgg666@gmail.com>
+*******************************************************************************/
 #include <stdio.h>
 #include "avisynth_c.h"
 

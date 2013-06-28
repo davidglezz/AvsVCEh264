@@ -400,7 +400,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
 void showHelp()
 {
     puts("Help on encoding usages and configurations...\n");
-    puts("exe -i input_Yuv_file.yuv -o output_h264_encoded_file.h264 -c balanced.cfg.cfg\n");
+    puts("exe -i input.avs -o output.h264 -c balanced.ini\n");
 }
 
 int GetWindowsVersion()

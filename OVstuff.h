@@ -4,6 +4,7 @@
 *
 * Copyright (C) 2013 David González García <davidgg666@gmail.com>
 *******************************************************************************/
+
 #include <stdio.h>
 
 // Input surface used for encoder

@@ -10,7 +10,7 @@ AvsVCEh264 -i input.avs -o output.264 -c myConfig.ini
 
 ##Configuration file
 You can use configuration files located in configs folder or create your own.
-If you have questions about settings values you can read and take as an example default_explained.ini configuration file
+If you have questions about settings values you can read and take as an example default_explained.ini configuration file.
 
 ## Limitations
 ### Software
@@ -33,4 +33,4 @@ To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visu
 - Set default input switch values for Output
 - Pause / Cancel buttons
 - Memory leaks!
-
+- > Timer ('strike')
