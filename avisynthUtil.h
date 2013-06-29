@@ -7,6 +7,10 @@
 #include <stdio.h>
 #include "avisynth_c.h"
 
+AVS_ScriptEnvironment *env;
+AVS_Clip *clip;
+const AVS_VideoInfo *info = 0;
+
 AVS_Clip* avisynth_filter(AVS_Clip *clip, AVS_ScriptEnvironment *env, const char *filter)
 {
     AVS_Value val_clip, val_array, val_return;
@@ -48,3 +52,35 @@ AVS_Clip* avisynth_source(char *file, AVS_ScriptEnvironment *env)
 
     return clip;
 }
+
+
+bool AVS_Init(char *inFile)
+{
+	env = avs_create_script_environment(AVISYNTH_INTERFACE_VERSION);
+    clip = avisynth_source(inFile, env);
+
+    info = avs_get_video_info(clip);
+
+    if (!avs_has_video(info))
+    {
+        fprintf(stderr, "Clip has no video.\n");
+        return false;
+    }
+
+    // ensure video is yv12
+    if (avs_has_video(info) && !avs_is_yv12(info))
+    {
+        fprintf(stderr, "Converting video to yv12.\n");
+        clip = avisynth_filter(clip, env, "ConvertToYV12");
+        info = avs_get_video_info(clip);
+
+        if (!avs_is_yv12(info))
+        {
+        	fprintf(stderr, "Failed to convert video to yv12.\n");
+            return false;
+        }
+    }
+
+    return true;
+}
+

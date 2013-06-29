@@ -15,9 +15,7 @@ If you have questions about settings values you can read and take as an example 
 ## Limitations
 ### Software
 The OpenVideo library is currently supported only on Windows 7 (maybe Vista).
-
 Catalyst driver release 12.8+
-
 Lastest version of AviSynth. Download from [http://avisynth.nl/](http://avisynth.nl/ "official website")
 
 ### Hardware
@@ -30,7 +28,22 @@ To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visu
 - Stdout output support.
 - Do case insensitive config file.
 - Buffered / Multi thread.
-- Set default input switch values for Output
-- Pause / Cancel buttons
+- Set default input switch values for Output.
+- Pause / Cancel buttons.
+- Reduce global variables number.
 - Memory leaks!
-- > Timer ('strike')
+- ~~Timer.~~
+- Unicode support
+- 64bit version
+
+## History
+- Now the encoding and decoding is done in separate threads and they make use of a circular buffer.
+- Removed huge memory leak that held UV planes of all frames
+- Added abort key (F8)
+- Improved info shown during the encoding.
+- Added monitor/info thread and buffer class
+- Added sample config files (speed, quality & balanced)
+- Added Timer class.
+- New config system, now use .ini files.
+- First release / prototype.
+

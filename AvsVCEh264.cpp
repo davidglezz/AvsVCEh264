@@ -50,16 +50,22 @@ typedef unsigned __int64    uint64;
 #include "timer.h"
 #include "buffer.h"
 #include "OVstuff.h"
+
+
 #include "avisynthUtil.h"
 
 
 /** Global **/
 unsigned int currentFrame = 0;
+unsigned int alignedSurfaceWidth = 0;
+unsigned int alignedSurfaceHeight = 0;
+unsigned int hostPtrSize = 0;
 
-const AVS_VideoInfo *info = 0;
+
+cl_device_id clDeviceID;
 
 // Threads
-HANDLE hThreadDec, hThreadEnc, hThreadMonitor;
+HANDLE hThreadAvsDec, hThreadEnc, hThreadMonitor;
 
 // Timer
 Timer timer;
@@ -67,11 +73,26 @@ Timer timer;
 // Buffer
 Buffer* frameBuffer;
 
+
+
 DWORD WINAPI threadMonitor(LPVOID id)
 {
     fprintf(stderr, "\n");
 
+    unsigned int gpuFreq, size;
+    clGetDeviceInfo(clDeviceID, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(unsigned int), &gpuFreq, &size);
+
+	// Show Info
+    fprintf(stderr, "Width       %d\n", info->width);
+	fprintf(stderr, "Height      %d\n", info->height);
+	fprintf(stderr, "Fps         %f\n", info->fps_numerator / (float)info->fps_denominator);
+	fprintf(stderr, "Frames      %d\n", info->num_frames);
+	fprintf(stderr, "Duration    %d s\n", info->num_frames * info->fps_denominator /  info->fps_numerator);
+	fprintf(stderr, "GPU Freq    %6.2f MHz\n", (float)gpuFreq);
+
 	// instatFps
+	while (currentFrame == 0)
+		Sleep(5);
 
     while (!GetAsyncKeyState(VK_F8))
     {
@@ -82,7 +103,7 @@ DWORD WINAPI threadMonitor(LPVOID id)
 		double fps = currentFrame / time;
 
     	unsigned int remaining_s = time * (double)info->num_frames /
-						(double)(currentFrame+1) - time;
+						(double)currentFrame - time;
 
 		unsigned int elapsed_s = time;
     	unsigned int elapsed_h = elapsed_s / 3600;
@@ -105,6 +126,57 @@ DWORD WINAPI threadMonitor(LPVOID id)
     return 0;
 }
 
+
+DWORD WINAPI threadAvsDec(LPVOID id)
+{
+	BYTE pUVrow[info->width];
+	for (int f = 0; f < info->num_frames; f++)
+	{
+		while (BufferIsFull(frameBuffer))
+			Sleep(250); // only bad if encodes more than 1000fps
+
+		AVS_VideoFrame *frame = avs_get_frame(clip, currentFrame);
+
+        const BYTE *pYplane = avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
+        const BYTE *pUplane = avs_get_read_ptr_p(frame, AVS_PLANAR_U);
+		const BYTE *pVplane = avs_get_read_ptr_p(frame, AVS_PLANAR_V);
+		BYTE *frameData  = (BYTE*) malloc(hostPtrSize);
+
+		BYTE *pBuf = frameData;
+
+        // Y plane
+        unsigned int pitch = avs_get_pitch_p(frame, AVS_PLANAR_Y);
+		for (int h = 0; h < info->height; h++)
+		{
+			memcpy(pBuf, pYplane, info->width);
+			pBuf += alignedSurfaceWidth;
+			pYplane += pitch;
+		}
+
+		// UV planes
+		unsigned int uiHalfHeight = info->height >> 1;
+		unsigned int uiHalfWidth  = info->width >> 1; //chromaWidth
+		unsigned int pos = 0;
+		for (unsigned int h = 0; h < uiHalfHeight; h++)
+		{
+			for (unsigned int i = 0; i < uiHalfWidth; ++i)
+			{
+				pUVrow[i*2]     = pUplane[pos + i];
+				pUVrow[i*2 + 1] = pVplane[pos + i];
+			}
+			memcpy(pBuf, pUVrow, info->width);
+			pBuf += alignedSurfaceWidth;
+			pos += uiHalfWidth;
+		}
+
+		BufferWrite(frameBuffer, (BufferType)frameData);
+
+        // not sure release is needed, but it doesn't cause an error
+        avs_release_frame(frame);
+	}
+	return 0;
+}
+
 /*******************************************************************************
  *  @fn     encodeProcess
  *  @brief  Encode an input video file and output encoded H.264 video file
@@ -116,64 +188,9 @@ DWORD WINAPI threadMonitor(LPVOID id)
  *  @param[in] pConfig      : OvConfigCtrl
  *  @return bool : true if successful; otherwise false.
  ******************************************************************************/
-bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
+bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
 			OPContextHandle oveContext, unsigned int deviceId, OvConfigCtrl *pConfig)
 {
-	cl_device_id clDeviceID = reinterpret_cast<cl_device_id>(deviceId);
-	AVS_ScriptEnvironment *env = avs_create_script_environment(AVISYNTH_INTERFACE_VERSION);
-    AVS_Clip *clip = avisynth_source(inFile, env);
-
-    info = avs_get_video_info(clip);
-
-    if (!avs_has_video(info))
-    {
-        fprintf(stderr, "Clip has no video.\n");
-        return false;
-    }
-
-    pConfig->rateControl.encRateControlFrameRateNumerator = info->fps_numerator;
-	pConfig->rateControl.encRateControlFrameRateDenominator = info->fps_denominator;
-
-	unsigned int gpuFreq, size;
-    clGetDeviceInfo(clDeviceID, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(unsigned int), &gpuFreq, &size);
-
-	// Show Info
-    fprintf(stderr, "Width       %d\n", info->width);
-	fprintf(stderr, "Height      %d\n", info->height);
-	fprintf(stderr, "Fps         %f\n", info->fps_numerator / (float)info->fps_denominator);
-	fprintf(stderr, "Frames      %d\n", info->num_frames);
-	fprintf(stderr, "Duration    %d s\n", info->num_frames * info->fps_denominator /  info->fps_numerator);
-	fprintf(stderr, "GPU Freq    %6.2f MHz\n", (float)gpuFreq);
-
-    // ensure video is yv12
-    if (avs_has_video(info) && !avs_is_yv12(info))
-    {
-        fprintf(stderr, "Converting video to yv12.\n");
-        clip = avisynth_filter(clip, env, "ConvertToYV12");
-        info = avs_get_video_info(clip);
-
-        if (!avs_is_yv12(info))
-        {
-        	fprintf(stderr, "Failed to convert video to yv12.\n");
-            return false;
-        }
-    }
-
-	// Vars
-	//unsigned int frameSize = info->width * info->height * 3 / 2;
-
-    // Make sure the surface is byte aligned
-    unsigned int alignedSurfaceWidth = ((info->width + (256 - 1)) & ~(256 - 1));
-    unsigned int alignedSurfaceHeight = (true) ? (info->height + 31) & ~31 : (info->height + 15) & ~15;
-
-	// NV12 is 3/2
-    int hostPtrSize = alignedSurfaceHeight * alignedSurfaceWidth * 3/2;
-
-    fprintf(stderr, "\nhostPtrSize: %d\n", hostPtrSize);
-    //fprintf(stderr, "frameSize: %d\n", frameSize);
-    fprintf(stderr, "alignedSurfaceWidth: %d\n", alignedSurfaceWidth);
-    fprintf(stderr, "alignedSurfaceHeight: %d\n", alignedSurfaceHeight);
-
     cl_int err;
     unsigned int numEventInWaitList = 0;
     OPMemHandle inputSurface;
@@ -243,16 +260,15 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
         return false;
     }
 
-	// Esto no deberia estar aqui
-    hThreadMonitor = CreateThread(NULL, 0, threadMonitor, 0, 0, 0);
-    SetThreadPriority(hThreadMonitor, THREAD_PRIORITY_IDLE);
-
 
 	// Go!
     for (currentFrame = 0; currentFrame < (unsigned)info->num_frames; currentFrame++)
     {
     	if (GetAsyncKeyState(VK_F8))
 			break;
+
+		while (BufferIsEmpty(frameBuffer))
+			Sleep(250); // only bad if encodes more than 1000fps
 
         cl_event inMapEvt;
         cl_int status;
@@ -268,45 +284,12 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *inFile, char *outFile,
         status = clReleaseEvent(inMapEvt);
 
 		//Read into the input surface buffer
-        BYTE *pBuf = (BYTE*)mapPtr;
-        AVS_VideoFrame *frame = avs_get_frame(clip, currentFrame);
 
-        const BYTE *pYplane = avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
-        const BYTE *pUplane = avs_get_read_ptr_p(frame, AVS_PLANAR_U);
-		const BYTE *pVplane = avs_get_read_ptr_p(frame, AVS_PLANAR_V);
-		BYTE *pUVrow  = (unsigned char*) malloc(info->width);
+        BufferType pBuf = 0;
+        BufferRead(frameBuffer, &pBuf);
+        memcpy((BYTE*)mapPtr, (BYTE*)pBuf, hostPtrSize);
+        free(pBuf);
 
-        // Y plane
-        unsigned int pitch = avs_get_pitch_p(frame, AVS_PLANAR_Y);
-		for (int h = 0; h < info->height; h++)
-		{
-			memcpy(pBuf, pYplane, info->width);
-			pBuf += alignedSurfaceWidth;
-			pYplane += pitch;
-		}
-
-		// UV planes
-		unsigned int uiHalfHeight = info->height >> 1;
-		unsigned int uiHalfWidth  = info->width >> 1; //chromaWidth
-		unsigned int pos = 0;
-		for (unsigned int h = 0; h < uiHalfHeight; h++)
-		{
-			for (unsigned int i = 0; i < uiHalfWidth; ++i)
-			{
-				pUVrow[i*2]     = pUplane[pos + i];
-				pUVrow[i*2 + 1] = pVplane[pos + i];
-			}
-			memcpy(pBuf, pUVrow, info->width);
-			pBuf += alignedSurfaceWidth;
-			pos += uiHalfWidth;
-		}
-
-        // not sure release is needed, but it doesn't cause an error
-        avs_release_frame(frame);
-
-        fprintf(stderr, "\r%d%% ", 100 * currentFrame / info->num_frames);
-
-        // ------- END READIN FRAME ---------
         cl_event unmapEvent;
         status = clEnqueueUnmapMemObject(encodeHandle->clCmdQueue, (cl_mem)inputSurface, mapPtr, 0, NULL, &unmapEvent);
         status = clFlush(encodeHandle->clCmdQueue);
@@ -473,15 +456,30 @@ int main(int argc, char* argv[])
     // Init Buffer
     frameBuffer = newBuffer();
 
+	// Init Avisync
+	if (!AVS_Init(input))
+        return 1;
 
 
-    // get the pointer to configuration controls
+    // load configuration
     OvConfigCtrl configCtrl;
     OvConfigCtrl *pConfigCtrl = (OvConfigCtrl*) &configCtrl;
     memset (pConfigCtrl, 0, sizeof (OvConfigCtrl));
 
     if (!loadConfig(pConfigCtrl, configFile))
         return 1;
+
+	pConfigCtrl->rateControl.encRateControlFrameRateNumerator = info->fps_numerator;
+	pConfigCtrl->rateControl.encRateControlFrameRateDenominator = info->fps_denominator;
+
+
+    // Make sure the surface is byte aligned
+    alignedSurfaceWidth = ((info->width + (256 - 1)) & ~(256 - 1));
+    alignedSurfaceHeight = (true) ? (info->height + 31) & ~31 : (info->height + 15) & ~15;
+
+	// frame size in memory: NV12 is 3/2
+    hostPtrSize = alignedSurfaceHeight * alignedSurfaceWidth * 3 / 2;
+    //unsigned int frameSize = info->width * info->height * 3 / 2;
 
     // Query for the device information:
     // This function fills the device handle with number of devices available and devices ids.
@@ -498,13 +496,20 @@ int main(int argc, char* argv[])
     // Create the encoder context on the device specified by deviceID
     OPContextHandle oveContext;
     encodeCreate(&oveContext, deviceId, &deviceHandle);
-
     OVEncodeHandle encodeHandle;
+    clDeviceID = reinterpret_cast<cl_device_id>(deviceId);
+
+	// hilo de estadisticas
+    hThreadMonitor = CreateThread(NULL, 0, threadMonitor, 0, 0, 0);
+    SetThreadPriority(hThreadMonitor, THREAD_PRIORITY_IDLE);
+
+    // hilo de lectura
+    hThreadAvsDec = CreateThread(NULL, 0, threadAvsDec, 0, 0, 0);
 
     // Create, initialize & encode a file
     puts("Encoding...\n");
     timer.start();
-    status = encodeProcess(&encodeHandle, input, output, oveContext, deviceId, pConfigCtrl);
+    status = encodeProcess(&encodeHandle, output, oveContext, deviceId, pConfigCtrl);
     timer.stop();
     if (status == false)
         return 1;
