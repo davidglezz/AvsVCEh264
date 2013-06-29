@@ -1,3 +1,9 @@
+/*******************************************************************************
+* This file is part of AvsVCEh264.
+* Contains declaration & functions for circularBuffer
+*
+* Copyright (C) 2013 David González García <davidgg666@gmail.com>
+*******************************************************************************/
 #include <malloc.h>
 
 typedef void* BufferType;

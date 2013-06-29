@@ -4,9 +4,6 @@
 * compression engine (VCE) on AMD platforms.
 * Copyright (C) 2013 David González García <davidgg666@gmail.com>
 *
-* AvsVCEh264 inspired by avs2pipe by Chris Beswick
-* Using video compression engine (VCE) on AMD platforms.
-*
 ********************************************************************************
 *
 * This file is part of AvsVCEh264.
@@ -181,7 +178,6 @@ DWORD WINAPI threadAvsDec(LPVOID id)
  *  @fn     encodeProcess
  *  @brief  Encode an input video file and output encoded H.264 video file
  *  @param[in] encodeHandle : Hanlde for the encoder
- *  @param[in] inFile		: input video file to be encoded
  *  @param[out] outFile		: output encoded H.264 video file
  *  @param[in] oveContext   : Hanlde to the encoder context
  *  @param[in] deviceID     : Device on which encoder context to be created
@@ -315,12 +311,11 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         // calling VCE for frame encode
         res = OVEncodeTask(encodeHandle->session, numEncodeTaskInputBuffers,
                   encodeTaskInputBufferList, &pictureParameter, &iTaskID,
-                  numEventInWaitList, NULL,
-                  &eventRunVideoProgram);
+                  numEventInWaitList, NULL, &eventRunVideoProgram);
 
         if (!res)
         {
-            printf("OVEncodeTask returned error %d\n", res);
+            fprintf(stderr, "OVEncodeTask returned error %d\n", res);
             return false;
         }
 
@@ -328,7 +323,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         err = clWaitForEvents(1, (cl_event *)&(eventRunVideoProgram));
         if (err != CL_SUCCESS)
         {
-            printf("clWaitForEvents returned error %d\n", err);
+           fprintf(stderr, "clWaitForEvents returned error %d\n", err);
             return false;
         }
 
