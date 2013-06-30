@@ -26,16 +26,18 @@ To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visu
 
 ## TODO
 - Stdout output support.
-- Do case insensitive config file.
-- ~~Buffered / Multi thread.~~
 - Set default input switch values for Output.
 - Pause / ~~Cancel~~ buttons.
-- Reduce global variables number.
+- Reduce number of global variables.
 - ~~Memory leaks!~~
 - ~~Timer.~~
 - Unicode support
 - 64bit version
 - Publish binaries
+- ~~!mod16 videos / cropOffset.~~
+- ~~Buffered / Multi thread.~~
+- F8 random fail.
+- Do case insensitive config file.
 
 ## History
 - Now the encoding and decoding is done in separate threads and they make use of a circular buffer.

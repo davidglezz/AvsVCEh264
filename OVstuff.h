@@ -281,7 +281,6 @@ bool setEncodeConfig(ove_session session, OvConfigCtrl *pConfig)
 {
     unsigned int numOfConfigBuffers = 4;
     OVE_CONFIG oveConfig[4];
-    OVresult res = 0;
 
     // send configuration values for this session
     oveConfig[0].config.pPictureControl     = &(pConfig->pictControl);
@@ -293,16 +292,15 @@ bool setEncodeConfig(ove_session session, OvConfigCtrl *pConfig)
     oveConfig[3].config.pRDO                = &(pConfig->rdoControl);
     oveConfig[3].configType                 = OVE_CONFIG_TYPE_RDO;
 
-    res = OVEncodeSendConfig (session, numOfConfigBuffers, oveConfig);
-
-    if (!res)
+    if (!(OVresult)OVEncodeSendConfig(session, numOfConfigBuffers, oveConfig))
     {
         printf("OVEncodeSendConfig returned error\n");
         return false;
     }
 
     // Just verifying that the values have been set in the encoding engine.
-    OVE_CONFIG_PICTURE_CONTROL      pictureControlConfig;
+
+    /*OVE_CONFIG_PICTURE_CONTROL      pictureControlConfig;
     OVE_CONFIG_RATE_CONTROL         rateControlConfig;
     OVE_CONFIG_MOTION_ESTIMATION    meControlConfig;
     OVE_CONFIG_RDO                  rdoControlConfig;
@@ -310,24 +308,39 @@ bool setEncodeConfig(ove_session session, OvConfigCtrl *pConfig)
     // Get the picture control configuration.
     memset(&pictureControlConfig, 0, sizeof(OVE_CONFIG_PICTURE_CONTROL));
     pictureControlConfig.size = sizeof(OVE_CONFIG_PICTURE_CONTROL);
-    res = OVEncodeGetPictureControlConfig(session, &pictureControlConfig);
+    if (!(OVresult)OVEncodeGetPictureControlConfig(session, &pictureControlConfig))
+    {
+        printf("OVEncodeGetPictureControlConfig returned error\n");
+        return false;
+    }
 
     // Get the rate control configuration
     memset(&rateControlConfig, 0, sizeof(OVE_CONFIG_RATE_CONTROL));
     rateControlConfig.size = sizeof(OVE_CONFIG_RATE_CONTROL);
-    res = OVEncodeGetRateControlConfig(session, &rateControlConfig);
-
+    if (!(OVresult)OVEncodeGetRateControlConfig(session, &rateControlConfig))
+	{
+        printf("OVEncodeGetRateControlConfig returned error\n");
+        return false;
+    }
     // Get the MotionEstimation configuration
     memset(&meControlConfig, 0, sizeof(OVE_CONFIG_MOTION_ESTIMATION));
     meControlConfig.size = sizeof(OVE_CONFIG_MOTION_ESTIMATION);
-    res = OVEncodeGetMotionEstimationConfig(session, &meControlConfig);
+    if (!(OVresult)OVEncodeGetMotionEstimationConfig(session, &meControlConfig))
+	{
+        printf("OVEncodeGetMotionEstimationConfig returned error\n");
+        return false;
+    }
 
     // Get the RDO configuration
     memset(&rdoControlConfig, 0, sizeof(OVE_CONFIG_RDO));
     rdoControlConfig.size = sizeof(OVE_CONFIG_RDO);
-    res = OVEncodeGetRDOControlConfig(session, &rdoControlConfig);
+    if (!OVEncodeGetRDOControlConfig(session, &rdoControlConfig))
+	{
+        printf("OVEncodeGetRDOControlConfig returned error\n");
+        return false;
+    }*/
 
-    return res;
+    return true;
 }
 
 

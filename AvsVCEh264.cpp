@@ -47,8 +47,6 @@ typedef unsigned __int64    uint64;
 #include "timer.h"
 #include "buffer.h"
 #include "OVstuff.h"
-
-
 #include "avisynthUtil.h"
 
 
@@ -74,9 +72,7 @@ Buffer* frameBuffer;
 
 DWORD WINAPI threadMonitor(LPVOID id)
 {
-    fprintf(stderr, "\n");
-
-    unsigned int gpuFreq, size;
+    unsigned int gpuFreq, size, prev_currentFrame = 0;
     clGetDeviceInfo(clDeviceID, CL_DEVICE_MAX_CLOCK_FREQUENCY, sizeof(unsigned int), &gpuFreq, &size);
 
 	// Show Info
@@ -87,20 +83,31 @@ DWORD WINAPI threadMonitor(LPVOID id)
 	fprintf(stderr, "Duration    %d s\n", info->num_frames * info->fps_denominator /  info->fps_numerator);
 	fprintf(stderr, "GPU Freq    %6.2f MHz\n", (float)gpuFreq);
 
-	// instatFps
+	// wait
 	while (currentFrame == 0)
 		Sleep(5);
 
-    while (!GetAsyncKeyState(VK_F8))
+	double prev_time = timer.getInMicroSec();
+
+	// Show loop
+	fprintf(stderr, "\n");
+    while (currentFrame < (unsigned)info->num_frames)
     {
-    	double time = timer.getInSec();
+		unsigned int currentFrame_snapshot = currentFrame;
 
-    	unsigned int percent = currentFrame * 100 / info->num_frames;
+    	unsigned int percent = currentFrame_snapshot * 100 / info->num_frames;
 
-		double fps = currentFrame / time;
+		double time = timer.getInMicroSec();
+		double ifps = (currentFrame_snapshot - prev_currentFrame) * 1000000 / (time - prev_time);
+
+		prev_time = time;
+		prev_currentFrame = currentFrame_snapshot;
+
+		time *= 0.000001;
+		double fps = currentFrame_snapshot / time;
 
     	unsigned int remaining_s = time * (double)info->num_frames /
-						(double)currentFrame - time;
+						(double)currentFrame_snapshot - time;
 
 		unsigned int elapsed_s = time;
     	unsigned int elapsed_h = elapsed_s / 3600;
@@ -113,9 +120,9 @@ DWORD WINAPI threadMonitor(LPVOID id)
 		unsigned int remaining_m = remaining_s / 60;
 		remaining_s %= 60;
 
-        fprintf(stderr, "\r%u%%\t%u/%u\tFps: %3.3f\tElapsed: %u:%02u:%02u\tRem.: %u:%02u:%02u",
-				percent, currentFrame, info->num_frames, fps, elapsed_h,
-				elapsed_m, elapsed_s, remaining_h, remaining_m, remaining_s);
+        fprintf(stderr, "\r%u%%\t%u/%u  Fps: %3.3f  %3.3f  Elapsed: %u:%02u:%02u  Rem.: %u:%02u:%02u",
+			percent, currentFrame_snapshot, info->num_frames, fps, ifps,
+			elapsed_h, elapsed_m, elapsed_s, remaining_h, remaining_m, remaining_s);
 
         Sleep(250);
     }
@@ -132,7 +139,7 @@ DWORD WINAPI threadAvsDec(LPVOID id)
 		while (BufferIsFull(frameBuffer))
 			Sleep(250); // only bad if encodes more than 1000fps
 
-		AVS_VideoFrame *frame = avs_get_frame(clip, currentFrame);
+		AVS_VideoFrame *frame = avs_get_frame(clip, f);
 
         const BYTE *pYplane = avs_get_read_ptr_p(frame, AVS_PLANAR_Y);
         const BYTE *pUplane = avs_get_read_ptr_p(frame, AVS_PLANAR_U);
@@ -235,6 +242,14 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         }
     }
 
+    // Output file handle
+    FILE *fw = fopen(outFile, "wb");
+    if (fw == NULL)
+    {
+        printf("Error opening the output file %s\n",outFile);
+        return false;
+    }
+
     // Setup the picture parameters
     OVE_ENCODE_PARAMETERS_H264 pictureParameter;
     unsigned int numEncodeTaskInputBuffers = 1;
@@ -248,13 +263,18 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
     unsigned int numTaskDescriptionsReturned = 0;
     OVE_OUTPUT_DESCRIPTION pTaskDescriptionList[1];
 
-	// Output file handle
-    FILE *fw = fopen(outFile, "wb");
-    if (fw == NULL)
-    {
-        printf("Error opening the output file %s\n",outFile);
-        return false;
-    }
+
+
+	// Setup the picture parameters
+	memset(&pictureParameter, 0, sizeof(OVE_ENCODE_PARAMETERS_H264));
+	pictureParameter.size = sizeof(OVE_ENCODE_PARAMETERS_H264);
+	pictureParameter.flags.value = 0;
+	pictureParameter.flags.flags.reserved = 0;
+	pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0);
+	pictureParameter.pictureStructure = OVE_PICTURE_STRUCTURE_H264_FRAME;
+	pictureParameter.forceRefreshMap = (OVE_BOOL)true;
+	pictureParameter.forceIMBPeriod = 0;
+	pictureParameter.forcePicType = OVE_PICTURE_TYPE_H264_NONE;
 
 
 	// Go!
@@ -266,49 +286,48 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
 		while (BufferIsEmpty(frameBuffer))
 			Sleep(250); // only bad if encodes more than 1000fps
 
-        cl_event inMapEvt;
-        cl_int status;
-
         inputSurface = encodeHandle->inputSurfaces[currentFrame % MAX_INPUT_SURFACE];
 
-        // Read the input file frame by frame
-        void* mapPtr = clEnqueueMapBuffer(encodeHandle->clCmdQueue, (cl_mem)inputSurface, CL_TRUE,
-										CL_MAP_READ | CL_MAP_WRITE, 0, hostPtrSize, 0, NULL, &inMapEvt, &status);
+        cl_int status;
+		cl_event inMapEvt;
+        void* mapPtr = clEnqueueMapBuffer(encodeHandle->clCmdQueue, (cl_mem)inputSurface,
+										CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, 0,
+										hostPtrSize, 0, NULL, &inMapEvt, &status);
 
-        status = clFlush(encodeHandle->clCmdQueue);
+        clFlush(encodeHandle->clCmdQueue);
         waitForEvent(inMapEvt);
-        status = clReleaseEvent(inMapEvt);
+        clReleaseEvent(inMapEvt);
 
 		//Read into the input surface buffer
-
         BufferType pBuf = 0;
         BufferRead(frameBuffer, &pBuf);
         memcpy((BYTE*)mapPtr, (BYTE*)pBuf, hostPtrSize);
         free(pBuf);
 
         cl_event unmapEvent;
-        status = clEnqueueUnmapMemObject(encodeHandle->clCmdQueue, (cl_mem)inputSurface, mapPtr, 0, NULL, &unmapEvent);
-        status = clFlush(encodeHandle->clCmdQueue);
+        clEnqueueUnmapMemObject(encodeHandle->clCmdQueue, (cl_mem)inputSurface, mapPtr, 0, NULL, &unmapEvent);
+        clFlush(encodeHandle->clCmdQueue);
         waitForEvent(unmapEvent);
-        status = clReleaseEvent(unmapEvent);
+        clReleaseEvent(unmapEvent);
 
         // use the input surface buffer as our Picture
         encodeTaskInputBufferList[0].bufferType = OVE_BUFFER_TYPE_PICTURE;
         encodeTaskInputBufferList[0].buffer.pPicture =  (OVE_SURFACE_HANDLE) inputSurface;
 
-        // Setup the picture parameters
-        memset(&pictureParameter, 0, sizeof(OVE_ENCODE_PARAMETERS_H264));
-        pictureParameter.size = sizeof(OVE_ENCODE_PARAMETERS_H264);
-        pictureParameter.flags.value = 0;
-        pictureParameter.flags.flags.reserved = 0;
-        pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0)?true:false;
-        pictureParameter.pictureStructure = OVE_PICTURE_STRUCTURE_H264_FRAME;
-        pictureParameter.forceRefreshMap = (OVE_BOOL)true;
-        pictureParameter.forceIMBPeriod = 0;
-        pictureParameter.forcePicType = OVE_PICTURE_TYPE_H264_NONE;
-
         // Encode a single picture.
         // calling VCE for frame encode
+        pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0);
+
+        memset(&pictureParameter, 0, sizeof(OVE_ENCODE_PARAMETERS_H264));
+		pictureParameter.size = sizeof(OVE_ENCODE_PARAMETERS_H264);
+		pictureParameter.flags.value = 0;
+		pictureParameter.flags.flags.reserved = 0;
+		pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0);
+		pictureParameter.pictureStructure = OVE_PICTURE_STRUCTURE_H264_FRAME;
+		pictureParameter.forceRefreshMap = (OVE_BOOL)true;
+		pictureParameter.forceIMBPeriod = 0;
+		pictureParameter.forcePicType = OVE_PICTURE_TYPE_H264_NONE;
+
         res = OVEncodeTask(encodeHandle->session, numEncodeTaskInputBuffers,
                   encodeTaskInputBufferList, &pictureParameter, &iTaskID,
                   numEventInWaitList, NULL, &eventRunVideoProgram);
@@ -323,7 +342,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         err = clWaitForEvents(1, (cl_event *)&(eventRunVideoProgram));
         if (err != CL_SUCCESS)
         {
-           fprintf(stderr, "clWaitForEvents returned error %d\n", err);
+        	fprintf(stderr, "clWaitForEvents returned error %d\n", err);
             return false;
         }
 
@@ -467,6 +486,8 @@ int main(int argc, char* argv[])
 	pConfigCtrl->rateControl.encRateControlFrameRateNumerator = info->fps_numerator;
 	pConfigCtrl->rateControl.encRateControlFrameRateDenominator = info->fps_denominator;
 
+	if (info->height % 16)
+		pConfigCtrl->pictControl.encCropBottomOffset = (((info->height / 16) + 1) * 16 -  info->height) >> 1;
 
     // Make sure the surface is byte aligned
     alignedSurfaceWidth = ((info->width + (256 - 1)) & ~(256 - 1));
@@ -512,7 +533,10 @@ int main(int argc, char* argv[])
 	fprintf(stderr, "\nEncoding complete in %f s\n", timer.getElapsedTime());
 
 
-	/**/
+	/* CloseThreads */
+	TerminateThread(hThreadAvsDec, 0);
+    CloseHandle(hThreadAvsDec);
+
 	TerminateThread(hThreadMonitor, 0);
     CloseHandle(hThreadMonitor);
 

@@ -96,7 +96,7 @@ static int handler(void* user, const char* section, const char* name, const char
 		else if (IS_NAME("encHeaderInsertionSpacing"))
 		{
 			pConfig->pictControl.encHeaderInsertionSpacing = iVal;
-		}
+		}/*
 		else if (IS_NAME("encCropLeftOffset"))
 		{
 			pConfig->pictControl.encCropLeftOffset = iVal;
@@ -112,7 +112,7 @@ static int handler(void* user, const char* section, const char* name, const char
 		else if (IS_NAME("encCropBottomOffset"))
 		{
 			pConfig->pictControl.encCropBottomOffset = iVal;
-		}
+		}*/
 		else if (IS_NAME("encNumMBsPerSlice"))
 		{
 			pConfig->pictControl.encNumMBsPerSlice = iVal;

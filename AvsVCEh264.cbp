@@ -41,6 +41,10 @@
 		<Unit filename="avisynth_c.h" />
 		<Unit filename="buffer.h" />
 		<Unit filename="configFile.h" />
+		<Unit filename="config\balanced.ini" />
+		<Unit filename="config\default_explained.ini" />
+		<Unit filename="config\quality.ini" />
+		<Unit filename="config\speed.ini" />
 		<Unit filename="ini.c">
 			<Option compilerVar="CC" />
 		</Unit>
