@@ -14,9 +14,9 @@ If you have questions about settings values you can read and take as an example 
 
 ## Limitations
 ### Software
-The OpenVideo library is currently supported only on Windows 7 (maybe Vista).
-Lastest version of AviSynth. Download from [http://avisynth.nl/](http://avisynth.nl/ "official website").
-Catalyst driver release 12.8+.
+- The OpenVideo library is currently supported only on Windows 7 (maybe Vista).
+- Lastest version of AviSynth. Download from [http://avisynth.nl/](http://avisynth.nl/ "official website").
+- Catalyst driver release 12.8+.
 
 ### Hardware
 TrinityAPU, Radeon HD 7000 Series (Tahiti XT, CapeVerde) or newer GPU.
