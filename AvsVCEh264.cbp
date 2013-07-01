@@ -37,7 +37,9 @@
 		<Unit filename="AvsVCEh264.cpp">
 			<Option weight="45" />
 		</Unit>
+		<Unit filename="OVstuff.h" />
 		<Unit filename="README.md" />
+		<Unit filename="avisynthUtil.h" />
 		<Unit filename="avisynth_c.h" />
 		<Unit filename="buffer.h" />
 		<Unit filename="configFile.h" />

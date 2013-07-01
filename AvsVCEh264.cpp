@@ -69,7 +69,6 @@ Timer timer;
 Buffer* frameBuffer;
 
 
-
 DWORD WINAPI threadMonitor(LPVOID id)
 {
     unsigned int gpuFreq, size, prev_currentFrame = 0;
@@ -198,7 +197,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
     unsigned int numEventInWaitList = 0;
     OPMemHandle inputSurface;
     OVresult res = 0;
-    OPEventHandle eventRunVideoProgram;
+
 
     // Initilizes encoder session & buffers
     // Create an OVE Session (Platform context, id, mode, profile, format, ...)
@@ -210,7 +209,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
 
     if (encodeHandle->session == NULL)
     {
-        puts("OVEncodeCreateSession failed.\n");
+        fprintf(stderr, "OVEncodeCreateSession failed.\n");
         return false;
     }
 
@@ -218,7 +217,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
     res = setEncodeConfig(encodeHandle->session, pConfig);
     if (!res)
     {
-        puts("OVEncodeSendConfig returned error\n");
+        fprintf(stderr, "OVEncodeSendConfig returned error\n");
         return false;
     }
 
@@ -226,7 +225,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
     encodeHandle->clCmdQueue = clCreateCommandQueue((cl_context)oveContext, clDeviceID, 0, &err);
     if(err != CL_SUCCESS)
     {
-        printf("Create command queue failed! Error :%d\n", err);
+        fprintf(stderr, "Create command queue failed! Error :%d\n", err);
         return false;
     }
 
@@ -237,7 +236,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
 
         if (err != CL_SUCCESS)
         {
-            printf("clCreateBuffer returned error %d\n", err);
+            fprintf(stderr, "clCreateBuffer returned error %d\n", err);
             return false;
         }
     }
@@ -246,7 +245,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
     FILE *fw = fopen(outFile, "wb");
     if (fw == NULL)
     {
-        printf("Error opening the output file %s\n",outFile);
+        printf("Error opening the output file %s\n", outFile);
         return false;
     }
 
@@ -257,13 +256,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
 			= (OVE_INPUT_DESCRIPTION *) malloc(sizeof(OVE_INPUT_DESCRIPTION) *
 				numEncodeTaskInputBuffers);
 
-    // For the Query Output
-    unsigned int iTaskID;
-    unsigned int numTaskDescriptionsRequested = 1;
-    unsigned int numTaskDescriptionsReturned = 0;
-    OVE_OUTPUT_DESCRIPTION pTaskDescriptionList[1];
-
-
+	OVE_OUTPUT_DESCRIPTION taskDescriptionList = {sizeof(OVE_OUTPUT_DESCRIPTION), 0, OVE_TASK_STATUS_NONE, 0, 0};
 
 	// Setup the picture parameters
 	memset(&pictureParameter, 0, sizeof(OVE_ENCODE_PARAMETERS_H264));
@@ -289,7 +282,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         inputSurface = encodeHandle->inputSurfaces[currentFrame % MAX_INPUT_SURFACE];
 
         cl_int status;
-		cl_event inMapEvt;
+		cl_event inMapEvt, unmapEvent;
         void* mapPtr = clEnqueueMapBuffer(encodeHandle->clCmdQueue, (cl_mem)inputSurface,
 										CL_TRUE, CL_MAP_READ | CL_MAP_WRITE, 0,
 										hostPtrSize, 0, NULL, &inMapEvt, &status);
@@ -304,7 +297,6 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         memcpy((BYTE*)mapPtr, (BYTE*)pBuf, hostPtrSize);
         free(pBuf);
 
-        cl_event unmapEvent;
         clEnqueueUnmapMemObject(encodeHandle->clCmdQueue, (cl_mem)inputSurface, mapPtr, 0, NULL, &unmapEvent);
         clFlush(encodeHandle->clCmdQueue);
         waitForEvent(unmapEvent);
@@ -316,21 +308,14 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
 
         // Encode a single picture.
         // calling VCE for frame encode
-        pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0);
 
-        memset(&pictureParameter, 0, sizeof(OVE_ENCODE_PARAMETERS_H264));
-		pictureParameter.size = sizeof(OVE_ENCODE_PARAMETERS_H264);
-		pictureParameter.flags.value = 0;
-		pictureParameter.flags.flags.reserved = 0;
-		pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0);
-		pictureParameter.pictureStructure = OVE_PICTURE_STRUCTURE_H264_FRAME;
-		pictureParameter.forceRefreshMap = (OVE_BOOL)true;
-		pictureParameter.forceIMBPeriod = 0;
-		pictureParameter.forcePicType = OVE_PICTURE_TYPE_H264_NONE;
+        //pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0);
+		OPEventHandle event;
+		unsigned int iTaskID;
 
         res = OVEncodeTask(encodeHandle->session, numEncodeTaskInputBuffers,
                   encodeTaskInputBufferList, &pictureParameter, &iTaskID,
-                  numEventInWaitList, NULL, &eventRunVideoProgram);
+                  numEventInWaitList, NULL, &event);
 
         if (!res)
         {
@@ -339,7 +324,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         }
 
         // Wait for Encode session completes
-        err = clWaitForEvents(1, (cl_event *)&(eventRunVideoProgram));
+        err = clWaitForEvents(1, (cl_event*)&(event));
         if (err != CL_SUCCESS)
         {
         	fprintf(stderr, "clWaitForEvents returned error %d\n", err);
@@ -347,45 +332,47 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         }
 
         // Query output
-        numTaskDescriptionsReturned = 0;
-        memset(pTaskDescriptionList, 0, sizeof(OVE_OUTPUT_DESCRIPTION)*numTaskDescriptionsRequested);
-        pTaskDescriptionList[0].size = sizeof(OVE_OUTPUT_DESCRIPTION);
+		unsigned int numTaskDescriptionsRequested = 1;
+		unsigned int numTaskDescriptionsReturned = 0;
 
-        do
-        {
+        //do
+        //{
             res = OVEncodeQueryTaskDescription(encodeHandle->session, numTaskDescriptionsRequested,
-                                               &numTaskDescriptionsReturned, pTaskDescriptionList);
-
+                                               &numTaskDescriptionsReturned, &taskDescriptionList);
             if (!res)
             {
                 fprintf(stderr, "OVEncodeQueryTaskDescription returned error %d\n", err);
                 return false;
             }
-        }
-        while (pTaskDescriptionList->status == OVE_TASK_STATUS_NONE);
+        //}
+        //while (taskDescriptionList.status == OVE_TASK_STATUS_NONE);
+
+
+		#ifdef DEBUG
+        if (numTaskDescriptionsReturned > 1)
+			fprintf(stderr, "Warning: numTaskDescriptions returned: %d\n", numTaskDescriptionsReturned);
+
+		if (taskDescriptionList.status != OVE_TASK_STATUS_COMPLETE)
+			fprintf(stderr, "Warning: taskDescriptionList.status returned: %d\n", taskDescriptionList.status);
+		#endif
 
         // Write compressed frame to the output file
-        for(unsigned int i = 0; i < numTaskDescriptionsReturned; i++)
-        {
-            if (pTaskDescriptionList[i].status == OVE_TASK_STATUS_COMPLETE &&
-                    pTaskDescriptionList[i].size_of_bitstream_data > 0)
-            {
-                // Write output data
-                fwrite(pTaskDescriptionList[i].bitstream_data, 1,
-                       pTaskDescriptionList[i].size_of_bitstream_data, fw);
+		if (taskDescriptionList.status == OVE_TASK_STATUS_COMPLETE &&
+				taskDescriptionList.size_of_bitstream_data > 0)
+		{
+			// Write output data
+			fwrite(taskDescriptionList.bitstream_data, 1,
+				   taskDescriptionList.size_of_bitstream_data, fw);
 
-                res = OVEncodeReleaseTask(encodeHandle->session, pTaskDescriptionList[i].taskID);
-            }
-        }
+			OVEncodeReleaseTask(encodeHandle->session, taskDescriptionList.taskID);
+		}
 
-        if (eventRunVideoProgram)
-            clReleaseEvent((cl_event) eventRunVideoProgram);
+        if (event)
+            clReleaseEvent((cl_event) event);
     }
 
 
 	// Free memory resources
-    avs_release_clip(clip);
-    avs_delete_script_environment(env);
     fclose(fw);
     free(encodeTaskInputBufferList);
 
@@ -515,12 +502,10 @@ int main(int argc, char* argv[])
     OVEncodeHandle encodeHandle;
     clDeviceID = reinterpret_cast<cl_device_id>(deviceId);
 
-	// hilo de estadisticas
+	// Threads
+	hThreadAvsDec = CreateThread(NULL, 0, threadAvsDec, 0, 0, 0);
     hThreadMonitor = CreateThread(NULL, 0, threadMonitor, 0, 0, 0);
     SetThreadPriority(hThreadMonitor, THREAD_PRIORITY_IDLE);
-
-    // hilo de lectura
-    hThreadAvsDec = CreateThread(NULL, 0, threadAvsDec, 0, 0, 0);
 
     // Create, initialize & encode a file
     puts("Encoding...\n");
@@ -532,7 +517,6 @@ int main(int argc, char* argv[])
 
 	fprintf(stderr, "\nEncoding complete in %f s\n", timer.getElapsedTime());
 
-
 	/* CloseThreads */
 	TerminateThread(hThreadAvsDec, 0);
     CloseHandle(hThreadAvsDec);
@@ -540,6 +524,9 @@ int main(int argc, char* argv[])
 	TerminateThread(hThreadMonitor, 0);
     CloseHandle(hThreadMonitor);
 
+	// Free avs resources
+	avs_release_clip(clip);
+    avs_delete_script_environment(env);
 
     // Free the resources used by the encoder session
     status = encodeClose(&encodeHandle);

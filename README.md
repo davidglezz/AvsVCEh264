@@ -24,6 +24,11 @@ TrinityAPU, Radeon HD 7000 Series (Tahiti XT, CapeVerde) or newer GPU.
 ##Build
 To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visual Studio 2008 or 2010)
 
+##AMD:
+VCE, OVC, OVE: It is unclear, in PDF documents referred to VCE (Video Codec Engine),
+in the libraries (OpenVideo), the prefix used is OVE_ but I can not find anything on the internet about it.
+AMD does not provide any documentation about its technology VCE, OVC or OVE
+
 ## TODO
 - Stdout output support.
 - Set default input switch values for Output.
@@ -36,10 +41,10 @@ To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visu
 - Publish binaries
 - ~~!mod16 videos / cropOffset.~~
 - ~~Buffered / Multi thread.~~
-- F8 random fail.
 - Do case insensitive config file.
 
 ## History
+- Fixed green bottom bar on videos whose height was not a multiple of 16.
 - Now the encoding and decoding is done in separate threads and they make use of a circular buffer.
 - Removed huge memory leak that held UV planes of all frames
 - Added abort key (F8)

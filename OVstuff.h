@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 // Input surface used for encoder
-#define MAX_INPUT_SURFACE	2
+#define MAX_INPUT_SURFACE	1
 
 typedef struct OVDeviceHandle
 {
@@ -258,7 +258,7 @@ bool encodeCreate(OPContextHandle *oveContext, unsigned int deviceId, OVDeviceHa
     OVE_ENCODE_CAPS encodeCaps;
     OVE_ENCODE_CAPS_H264 encode_cap_full;
     encodeCaps.caps.encode_cap_full = (OVE_ENCODE_CAPS_H264 *)&encode_cap_full;
-    status = getDeviceCap(*oveContext ,deviceId,&encodeCaps);
+    status = getDeviceCap(*oveContext, deviceId, &encodeCaps);
 
     if(!status)
     {
