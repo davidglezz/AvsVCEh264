@@ -27,7 +27,7 @@ To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visu
 ##AMD:
 VCE, OVC, OVE: It is unclear, in PDF documents referred to VCE (Video Codec Engine),
 in the libraries (OpenVideo), the prefix used is OVE_ but I can not find anything on the internet about it.
-AMD does not provide any documentation about its technology VCE, OVC or OVE
+AMD does not provide any documentation about its technology VCE, OVC or OVE.
 
 ## TODO
 - Stdout output support.
