@@ -36,9 +36,11 @@ typedef unsigned __int64    uint64;
 
 #endif /* end ifdef __GNUC__ */
 
-#include <windows.h>
 //#include <stdio.h>
-//#include <stdlib.h>
+#include <stdlib.h>
+#include <malloc.h>
+#include <windows.h>
+#include <windows.h>
 //#include <string.h>
 #include <cl\cl.h>
 #include <OpenVideo\OVEncode.h>
@@ -48,6 +50,8 @@ typedef unsigned __int64    uint64;
 #include "buffer.h"
 #include "OVstuff.h"
 #include "avisynthUtil.h"
+
+
 
 
 /** Global **/
@@ -454,9 +458,6 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // Init Buffer
-    frameBuffer = newBuffer();
-
 	// Init Avisync
 	if (!AVS_Init(input))
         return 1;
@@ -483,6 +484,14 @@ int main(int argc, char* argv[])
 	// frame size in memory: NV12 is 3/2
     hostPtrSize = alignedSurfaceHeight * alignedSurfaceWidth * 3 / 2;
     //unsigned int frameSize = info->width * info->height * 3 / 2;
+
+    // Init Buffer
+    frameBuffer = newBuffer();
+
+	/*for (int i = 0; i < 256; i++)
+	{
+		frameBuffer->keys[i] =  _aligned_malloc(hostPtrSize, 32);
+	}*/
 
     // Query for the device information:
     // This function fills the device handle with number of devices available and devices ids.

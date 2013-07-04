@@ -350,13 +350,13 @@ bool setEncodeConfig(ove_session session, OvConfigCtrl *pConfig)
  *  @param[in] inMapEvt : Event for which it has to wait for completion
  *  @return bool : true if successful; otherwise false.
  ******************************************************************************/
-void waitForEvent(cl_event inMapEvt)
+inline void waitForEvent(cl_event inMapEvt)
 {
-    cl_int status, eventStatus = CL_QUEUED;
+    cl_int eventStatus = CL_QUEUED;
 
     while (eventStatus != CL_COMPLETE)
     {
-        status = clGetEventInfo(inMapEvt, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &eventStatus, NULL);
+        clGetEventInfo(inMapEvt, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &eventStatus, NULL);
     }
 }
 
