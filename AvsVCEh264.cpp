@@ -140,7 +140,7 @@ DWORD WINAPI threadAvsDec(LPVOID id)
 	for (int f = 0; f < info->num_frames; f++)
 	{
 		while (BufferIsFull(frameBuffer))
-			Sleep(250); // only bad if encodes more than 1000fps
+			Sleep(250); // only bad if encodes more than 1000fps, then decrease
 
 		AVS_VideoFrame *frame = avs_get_frame(clip, f);
 
@@ -390,7 +390,7 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
 void showHelp()
 {
     puts("Help on encoding usages and configurations...\n");
-    puts("exe -i input.avs -o output.h264 -c balanced.ini\n");
+    puts("AvsVCEh264 -i input.avs -o output.h264 -c configFile.ini\n");
 }
 
 int GetWindowsVersion()
@@ -433,20 +433,21 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        // processing working directory and input file
+        // input file
         if (strncmp (argv[i], "-i", 2) == 0)
         {
             strcat(input, argv[i+1]);
             argCheck++;
         }
 
-        // processing working directory and output file
+        // output file
         if (strncmp (argv[i], "-o", 2) == 0 )
         {
             strcat(output, argv[i+1]);
             argCheck++;
         }
 
+		// config file
         if (strncmp(argv[i], "-c", 2) == 0 )
         {
             strcat(configFile, argv[i+1]);

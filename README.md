@@ -12,14 +12,15 @@ AvsVCEh264 -i input.avs -o output.264 -c myConfig.ini
 You can use configuration files located in configs folder or create your own.
 If you have questions about settings values you can read and take as an example default_explained.ini configuration file.
 
-## Limitations
+## Requirements & Limitations
 ### Software
 - The OpenVideo library is currently supported only on Windows 7 (maybe Vista).
 - Lastest version of AviSynth. Download from [http://avisynth.nl/](http://avisynth.nl/ "official website").
 - Catalyst driver release 12.8+.
 
 ### Hardware
-TrinityAPU, Radeon HD 7000 Series (Tahiti XT, CapeVerde) or newer GPU.
+- TrinityAPU, Radeon HD 7000 Series (Tahiti XT, CapeVerde) or newer GPU.
+- At least 1.5 GB of free ram.
 
 ##Build
 To build you need AMD APP SDK 2.7 or later and a compiler (Mingw, Microsoft Visual Studio 2008 or 2010)
@@ -34,13 +35,9 @@ AMD does not provide any documentation about its technology VCE, OVC or OVE.
 - Set default input switch values for Output.
 - Pause / ~~Cancel~~ buttons.
 - Reduce number of global variables.
-- ~~Memory leaks!~~
-- ~~Timer.~~
 - Unicode support
 - 64bit version
 - Publish binaries
-- ~~!mod16 videos / cropOffset.~~
-- ~~Buffered / Multi thread.~~
 - Do case insensitive config file.
 
 ## History
