@@ -313,7 +313,9 @@ bool encodeProcess(OVEncodeHandle *encodeHandle, char *outFile,
         // Encode a single picture.
         // calling VCE for frame encode
 
-        //pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0);
+		// http://stackoverflow.com/questions/9618369/h-264-over-rtp-identify-sps-and-pps-frames
+        // pictureParameter.insertSPS = (OVE_BOOL)(currentFrame == 0);
+
 		OPEventHandle event;
 		unsigned int iTaskID;
 
